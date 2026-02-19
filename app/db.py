@@ -7,6 +7,7 @@
 # The middleware tracks how many queries fire,
 # so the difference shows up clearly in metrics.
 
+
 import sqlite3
 import time
 import config
@@ -52,6 +53,7 @@ def fetch_cart_items(conn, cart_id):
 @track_query
 def fetch_product(conn, product_id):
     """Called once per cart item in slow version = N+1"""
+    time.sleep(0.01)
     return conn.execute(
         "SELECT * FROM products WHERE id = ?", 
         (product_id,)
