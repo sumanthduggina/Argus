@@ -18,11 +18,13 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(message)s",
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("logs/agent.log")
+        logging.StreamHandler(open(sys.stdout.fileno(), 
+                                   mode='w', 
+                                   encoding='utf-8', 
+                                   closefd=False)),
+        logging.FileHandler("logs/agent.log", encoding='utf-8')
     ]
 )
-
 logger = logging.getLogger(__name__)
 
 # ── Ensure directories exist ──────────────────────────────────────────────
@@ -36,11 +38,11 @@ def main():
     logger.info("="*60)
     
     # ── Initialize storage ────────────────────────────────────────────────
-    from storage.hot_store import HotStore
+    from storage.remote_hot_store import RemoteHotStore
     from storage.cold_store import ColdStore
     from storage.knowledge_graph import KnowledgeGraph
     
-    hot_store = HotStore()
+    hot_store = RemoteHotStore()
     cold_store = ColdStore()
     knowledge_graph = KnowledgeGraph()
     
@@ -71,14 +73,14 @@ def main():
     
     logger.info("✅ Agent components initialized")
     
-    # ── Start collector subprocess ────────────────────────────────────────
-    collector_proc = subprocess.Popen(
-        [sys.executable, "-m", "ingestion.collector"],
-        stdout=open("logs/collector.log", "a"),
-        stderr=subprocess.STDOUT
-    )
-    logger.info(f"✅ Collector started (PID: {collector_proc.pid})")
-    time.sleep(2)  # Wait for collector to be ready
+    # # ── Start collector subprocess ────────────────────────────────────────
+    # collector_proc = subprocess.Popen(
+    #     [sys.executable, "-m", "ingestion.collector"],
+    #     stdout=open("logs/collector.log", "a"),
+    #     stderr=subprocess.STDOUT
+    # )
+    # logger.info(f"✅ Collector started (PID: {collector_proc.pid})")
+    # time.sleep(2)  # Wait for collector to be ready
     
     # ── Start detector ────────────────────────────────────────────────────
     detector.start()

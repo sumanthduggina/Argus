@@ -1,6 +1,8 @@
 # Folder: firetiger-demo/scripts/seed_db.py
 # Run once to set up the SQLite database with test data.
-
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import sqlite3
 import random
 import config

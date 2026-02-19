@@ -23,7 +23,7 @@ def make_request(endpoint: str, user_id: str):
     try:
         start = time.time()
         response = requests.get(
-            f"http://localhost:5000{endpoint}",
+            f"http://127.0.0.1:5000{endpoint}",
             headers={
                 "X-User-ID": user_id,
                 "X-Session-ID": f"sess-{user_id[:8]}"

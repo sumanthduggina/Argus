@@ -118,7 +118,7 @@ Rules:
     # ─── Call Claude ───────────────────────────────────────────────────────
     response = client.messages.create(
         model="claude-opus-4-6",
-        max_tokens=1500,
+        max_tokens=2000,
         messages=[{"role": "user", "content": prompt}]
     )
     

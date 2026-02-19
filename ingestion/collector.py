@@ -134,7 +134,43 @@ def run_scheduler():
 # Start scheduler in background thread when collector starts
 scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
 scheduler_thread.start()
+@app.route("/query/latency", methods=["GET"])
+def query_latency():
+    endpoint = request.args.get("endpoint", "/checkout")
+    minutes = int(request.args.get("minutes", 5))
+    result = hot_store.get_recent_latency(endpoint, minutes)
+    return jsonify({"latency": result})
 
+@app.route("/query/endpoints", methods=["GET"])
+def query_endpoints():
+    result = hot_store.get_all_endpoints()
+    return jsonify({"endpoints": result})
+
+@app.route("/query/query_trend", methods=["GET"])
+def query_trend():
+    endpoint = request.args.get("endpoint", "/checkout")
+    result = hot_store.get_query_count_trend(endpoint)
+    return jsonify({"trend": result})
+
+@app.route("/query/affected_users", methods=["GET"])
+def query_affected_users():
+    endpoint = request.args.get("endpoint", "/checkout")
+    threshold = float(request.args.get("threshold", 100))
+    since_str = request.args.get("since")
+    from datetime import datetime, timedelta
+    since = datetime.fromisoformat(since_str) if since_str else datetime.now() - timedelta(minutes=10)
+    result = hot_store.get_affected_users(endpoint, since, threshold)
+    return jsonify({"user_ids": result})
+
+@app.route("/query/commit_shas", methods=["GET"])
+def query_commit_shas():
+    endpoint = request.args.get("endpoint", "/checkout")
+    result = hot_store.get_recent_commit_shas(endpoint)
+    return jsonify({"shas": result})
+
+@app.route("/query/event_count", methods=["GET"])
+def query_event_count():
+    return jsonify({"count": hot_store.get_event_count()})
 if __name__ == "__main__":
     logger.info(f"Collector starting on port {config.COLLECTOR_PORT}")
-    app.run(port=config.COLLECTOR_PORT, debug=False)
+    app.run(host="127.0.0.1", port=config.COLLECTOR_PORT, debug=False)

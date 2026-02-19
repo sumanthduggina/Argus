@@ -1,63 +1,63 @@
-# Folder: firetiger-demo/agent/response_parser.py
-#
-# Safely parses Claude's JSON responses.
-# Claude sometimes wraps JSON in markdown code fences.
-# This handles that and validates the response structure.
+# agent/response_parser.py
 
 import json
 import re
 import logging
-from typing import Type
-from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 
-def parse_claude_response(raw_response: str, 
-                           step_name: str) -> dict:
+def parse_claude_response(raw_response: str, step_name: str) -> dict:
     """
-    Parses Claude's response into a Python dict.
-    
-    Handles:
-    - Raw JSON
-    - JSON wrapped in ```json ... ``` fences
-    - JSON with extra whitespace
-    
-    Always logs the raw response for debugging prompt issues.
+    Parses Claude's JSON response handling all edge cases.
     """
-    logger.debug(f"[{step_name}] Raw Claude response:\n{raw_response}")
-    
+    # Log raw response for debugging
+    logger.debug(f"[{step_name}] Raw response length: {len(raw_response)}")
+
+    # Clean the response
+    text = raw_response.strip()
+
     # Try 1: Direct JSON parse
     try:
-        return json.loads(raw_response.strip())
+        return json.loads(text)
     except json.JSONDecodeError:
         pass
-    
-    # Try 2: Strip markdown code fences
-    # Claude sometimes wraps JSON in ```json ... ```
+
+    # Try 2: Extract from ```json ... ``` fences
     fence_pattern = r"```(?:json)?\s*([\s\S]*?)\s*```"
-    match = re.search(fence_pattern, raw_response)
-    if match:
+    matches = re.findall(fence_pattern, text)
+    for match in matches:
         try:
-            return json.loads(match.group(1))
+            return json.loads(match.strip())
         except json.JSONDecodeError:
-            pass
-    
+            continue
+
     # Try 3: Find outermost { } block
-    start = raw_response.find("{")
-    end = raw_response.rfind("}")
-    if start != -1 and end != -1:
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
         try:
-            return json.loads(raw_response[start:end+1])
+            return json.loads(text[start:end+1])
         except json.JSONDecodeError:
             pass
-    
-    # All parsing failed
+
+    # Try 4: Fix truncated JSON by finding last complete object
+    # Sometimes Claude response gets cut off
+    if start != -1:
+        # Try progressively smaller substrings
+        subset = text[start:]
+        for i in range(len(subset), 0, -1):
+            try:
+                return json.loads(subset[:i])
+            except json.JSONDecodeError:
+                continue
+
+    # All failed
     logger.error(
-        f"[{step_name}] Failed to parse Claude response.\n"
-        f"Raw response: {raw_response[:500]}"
+        f"[{step_name}] Failed to parse. "
+        f"Raw start: {raw_response[:300]}"
     )
     raise ValueError(
-        f"Claude response for {step_name} could not be parsed as JSON. "
-        f"Check your prompt. Raw: {raw_response[:200]}"
+        f"Could not parse Claude response for {step_name}. "
+        f"Raw: {raw_response[:200]}"
     )
