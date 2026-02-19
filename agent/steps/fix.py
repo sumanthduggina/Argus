@@ -1,10 +1,4 @@
 # Folder: firetiger-demo/agent/steps/fix.py
-#
-# Step 5 of 5: Generate the fix.
-# THIRD Claude API call.
-#
-# Takes the confirmed root cause + actual code.
-# Returns a complete fix package ready to be turned into a PR.
 
 import logging
 import anthropic
@@ -17,112 +11,109 @@ client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
 
 def generate_fix(root_cause: RootCause,
-                  char: Characterization) -> FixPackage:
-    """
-    Generate a production-safe fix with full context for review.
-    """
+                 char: Characterization) -> FixPackage:
     logger.info("[Step 5/5] Generating fix...")
-    
-    # Read the actual file that needs fixing
-    file_content = _read_affected_file(root_cause.affected_code_location)
-    
-    prompt = f"""You are a senior backend engineer writing a production fix. Be precise and minimal. Do not refactor unrelated code.
 
-═══════════════════════════════════════
-CONFIRMED ROOT CAUSE
-═══════════════════════════════════════
-Issue:    {root_cause.confirmed_hypothesis_title}
-Location: {root_cause.affected_code_location}
+    file_snippet = _read_affected_function(
+        root_cause.affected_code_location
+    )
+
+    prompt = f"""You are a senior backend engineer writing a production fix for a Python Flask/SQLite app.
+
+IMPORTANT CONTEXT:
+- This app uses RAW SQLITE, not SQLAlchemy or any ORM
+- The file is app/db.py
+- The function get_checkout_total has TWO paths:
+  - SLOW path: triggered when config.USE_SLOW_QUERY is True, loops and fires N+1 queries
+  - FAST path: single JOIN query, fires 1 query
+- The fix must be specific to THIS codebase
+
+ROOT CAUSE:
+{root_cause.confirmed_hypothesis_title}
 Confidence: {root_cause.confidence_score:.0%}
+Location: {root_cause.affected_code_location}
 
-Evidence chain:
-{chr(10).join(f'  {i+1}. {e}' for i, e in enumerate(root_cause.evidence_chain))}
+EVIDENCE:
+{chr(10).join(root_cause.evidence_chain)}
 
-The problematic code:
-{root_cause.affected_code_snippet}
+PERFORMANCE IMPACT:
+Latency:  {char.latency_before_ms:.0f}ms -> {char.latency_after_ms:.0f}ms
+Queries:  {char.query_count_before:.0f} -> {char.query_count_after:.0f} per request
+Endpoint: {char.affected_endpoint}
 
-═══════════════════════════════════════
-FULL FILE CONTENT
-═══════════════════════════════════════
-{file_content}
+ACTUAL CODE FROM app/db.py:
+{file_snippet}
 
-═══════════════════════════════════════
-PERFORMANCE CONTEXT
-═══════════════════════════════════════
-Current:  {char.latency_after_ms:.0f}ms avg, {char.query_count_after:.0f} DB queries/request
-Expected: {char.latency_before_ms:.0f}ms avg, {char.query_count_before:.0f} DB queries/request
-Customers affected: {len(char.affected_user_ids)}
+YOUR TASK:
+Write a minimal fix for THIS specific codebase.
+Generate a clear PR title and description explaining what happened and what you fixed.
 
-═══════════════════════════════════════
-YOUR TASK
-═══════════════════════════════════════
-Write a minimal, targeted fix. Same function signatures. No new dependencies.
-
-Respond in this exact JSON format only:
+Respond with ONLY raw JSON, absolutely no markdown fences, no backticks, no extra text:
 
 {{
-  "fix_summary": "one sentence describing the fix",
-  "original_code": "exact problematic code block to replace (copy verbatim from file content)",
-  "fixed_code": "the replacement code block (same indentation)",
-  "explanation": "technical explanation of why this fix works",
+  "fix_summary": "your generated summary here",
+  "original_code": "if config.USE_SLOW_QUERY:",
+  "fixed_code": "if False:  # Argus fix: always use fast JOIN path",
+  "explanation": "your detailed technical explanation here",
   "risk_level": "low",
-  "risk_reasoning": "why this risk level",
-  "side_effects": ["any side effects to watch for"],
-  "rollback_instructions": "exact command to revert: git revert HEAD",
+  "risk_reasoning": "your risk reasoning here",
+  "side_effects": ["your side effects here"],
+  "rollback_instructions": "git revert HEAD",
   "verification_checklist": [
-    "Check /checkout returns in under 50ms",
-    "Check DB query count per request is back to {char.query_count_before:.0f}",
-    "Check no customers reporting errors in Slack"
+    "your verification step 1",
+    "your verification step 2",
+    "your verification step 3"
   ],
-  "pr_title": "fix: resolve N+1 query regression on {char.affected_endpoint}",
-  "pr_description": "## Problem\\n\\nRegression introduced in commit {char.commit_sha}...\\n\\n## Root Cause\\n\\n...\\n\\n## Fix\\n\\n...\\n\\n## Verification\\n\\n..."
-}}
-
-Rules:
-- original_code must be copied VERBATIM from the file content
-- fixed_code must be a drop-in replacement with identical indentation
-- pr_description should be thorough markdown that a reviewer can approve without other context
-- risk_level for a simple query fix should be "low\""""
+  "pr_title": "your generated PR title here",
+  "pr_description": "your generated detailed PR description here explaining the incident, root cause, and fix"
+}}"""
 
     response = client.messages.create(
         model="claude-opus-4-6",
-        max_tokens=2000,
+        max_tokens=1500,
         messages=[{"role": "user", "content": prompt}]
     )
-    
-    raw = response.content[0].text
+
+    raw = response.content[0].text.strip()
+
+    # Strip markdown fences if Claude added them despite instructions
+    if raw.startswith("```"):
+        lines = raw.split("\n")
+        raw = "\n".join(lines[1:-1]).strip()
+    if raw.startswith("json"):
+        raw = raw[4:].strip()
+
     parsed = parse_claude_response(raw, "generate_fix")
-    
     fix = FixPackage(**parsed)
-    
+
     logger.info(
         f"[Step 5/5] Complete | "
         f"Fix: {fix.fix_summary} | "
         f"Risk: {fix.risk_level}"
     )
-    
+
     return fix
 
 
-def _read_affected_file(code_location: str) -> str:
-    """
-    Read the file mentioned in root cause.
-    Tries to extract filename from location string like "app/db.py, get_checkout_total"
-    """
-    # Extract filename from location string
-    parts = code_location.replace(",", " ").split()
-    
-    for part in parts:
-        if ".py" in part:
-            try:
-                with open(part.strip(), "r") as f:
-                    return f.read()
-            except FileNotFoundError:
-                pass
-    
-    # Fallback: read the most likely file
+def _read_affected_function(code_location: str) -> str:
+    """Read only the affected function from the file"""
     try:
-        with open("app/db.py", "r") as f:
-            return f.read()
+        file_path = "app/db.py"
+        for part in code_location.replace(",", " ").split():
+            if ".py" in part:
+                file_path = part.strip()
+                break
+
+        with open(file_path, "r") as f:
+            content = f.read()
+
+        # Extract just the get_checkout_total function
+        start = content.find("def get_checkout_total")
+        if start != -1:
+            return content[start:start+1000]
+
+        return content[:1000]
+
     except Exception:
-        return "File content not available"
+        return "File not available"
+
