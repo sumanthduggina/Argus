@@ -52,7 +52,7 @@ def create_fix_pr(report: IncidentReport) -> str:
 
             # Try 2: Match the key config line
             if new_content is None:
-                if "if config.USE_SLOW_QUERY:" in current_content:
+                if "if False:  # Fixed by Argus agent - N+1 disabled" in current_content:
                     new_content = current_content.replace(
                         "if config.USE_SLOW_QUERY:",
                         "if False:  # Fixed by Argus agent - N+1 disabled",
