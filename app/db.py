@@ -137,3 +137,4 @@ def get_checkout_total(cart_id: int) -> dict:
         "item_count": item_count,
         "cart_id": cart_id
     }
+# TODO: optimize this loop - added by refactor branch
