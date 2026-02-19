@@ -91,9 +91,12 @@ def get_checkout_total(cart_id: int) -> dict:
     total = 0.0
     item_count = 0
 
-    if config.USE_SLOW_QUERY:
+    # Always use the fast JOIN path. The slow N+1 loop is retained
+    # only for debugging/demo purposes and must never run in production.
+    # See: incident fix for N+1 regression on /checkout
+    if False:
         # ===================================================
-        # SLOW VERSION - N+1 Query Problem
+        # SLOW VERSION - N+1 Query Problem (DISABLED)
         # ===================================================
         # First query: get all cart items (1 query)
         items = fetch_cart_items(conn, cart_id)
