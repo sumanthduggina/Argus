@@ -52,7 +52,7 @@ Respond with ONLY raw JSON, absolutely no markdown fences, no backticks, no extr
 
 {{
   "fix_summary": "your generated summary here",
-  "original_code": "if config.USE_SLOW_QUERY:",
+  "original_code": "if False:  # Argus fix: disable N+1 slow path, always use fast JOIN query",
   "fixed_code": "if False:  # Argus fix: always use fast JOIN path",
   "explanation": "your detailed technical explanation here",
   "risk_level": "low",
