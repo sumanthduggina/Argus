@@ -98,40 +98,17 @@ def get_checkout_total(cart_id: int) -> dict:
         # SLOW VERSION - N+1 Query Problem
         # ===================================================
         # First query: get all cart items (1 query)
-        items = fetch_cart_items(conn, cart_id)
-        
-        for item in items:
-            # Each iteration fires TWO more queries:
-            # 1. fetch product by id
-            # 2. (implicitly via product) fetch seller for tax
-            # With 100 items = 201 total queries
-            product = fetch_product(conn, item["product_id"])
-            
-            if product:
-                # Another query to get seller tax rate
-                seller = conn.execute(
-                    "SELECT tax_rate FROM sellers WHERE id = ?",
-                    (product["seller_id"],)
-                ).fetchone()
-                query_counter["count"] += 1
-                
-                price = product["price"] * item["quantity"]
-                tax = price * (seller["tax_rate"] if seller else 0.08)
-                total += price + tax
-                item_count += 1
-    else:
-        # ===================================================
-        # FAST VERSION - Single JOIN Query
-        # ===================================================
-        # Everything in one query regardless of cart size
-        rows = fetch_checkout_fast(conn, cart_id)
-        
-        for row in rows:
-            price = row["price"] * row["quantity"]
-            tax = price * row["tax_rate"]
-            total += price + tax
-            item_count += 1
-
+            # ===================================================
+    # FAST VERSION - Single JOIN Query
+    # ===================================================
+    # Everything in one query regardless of cart size
+    rows = fetch_checkout_fast(conn, cart_id)
+    
+    for row in rows:
+        price = row["price"] * row["quantity"]
+        tax = price * row["tax_rate"]
+        total += price + tax
+        item_count += 1
     conn.close()
     
     return {
